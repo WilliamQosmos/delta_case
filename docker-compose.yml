@@ -1,0 +1,92 @@
+version: '3.8'
+
+services:
+  api:
+    container_name: api
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - delivery_network
+    restart: on-failure
+
+  worker:
+    container_name: worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: python -c "from app.workers.package_processor import start_worker; start_worker()"
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+      - api
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - delivery_network
+    restart: always
+
+  db:
+    container_name: db
+    image: mysql:8.0
+    command: --default-authentication-plugin=mysql_native_password
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: delivery_service
+      MYSQL_USER: $MYSQL_USER
+      MYSQL_PASSWORD: $MYSQL_PASSWORD
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - delivery_network
+
+  redis:
+    container_name: redis
+    image: redis:7.0
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - delivery_network
+
+  rabbitmq:
+    container_name: rabbitmq
+    image: rabbitmq:3.11-management
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: $RABBITMQ_USER
+      RABBITMQ_DEFAULT_PASS: $RABBITMQ_PASSWORD
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - delivery_network
+
+networks:
+  delivery_network:
+    driver: bridge
+
+volumes:
+  mysql_data:
+  redis_data:
+  rabbitmq_data:
